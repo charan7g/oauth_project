@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:oauth2-provider="http://www.mulesoft.org/schema/mule/oauth2-provider"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:oauth="http://www.mulesoft.org/schema/mule/oauth" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/oauth http://www.mulesoft.org/schema/mule/oauth/current/mule-oauth.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/oauth2-provider http://www.mulesoft.org/schema/mule/oauth2-provider/current/mule-oauth2-provider.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="cd7ca49d-4e86-4822-a7ef-88936988e12a" >
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+	<os:object-store name="Client_OS" doc:name="Object store" doc:id="81202dfd-da0d-41d5-9850-b0e53cc8eeca" />
+	<os:object-store name="Token_OS" doc:name="Object store" doc:id="f0445ff9-5be4-4bf1-afc0-dfdd72675af3" entryTtl="60" entryTtlUnit="MINUTES" expirationInterval="10"/>
+	<oauth2-provider:config name="OAuth2_Provider_Config" doc:name="OAuth2 Provider Config" doc:id="682dbb2f-2f79-40df-bc12-63ed052b9885" listenerConfig="HTTP_Listener_config" clientStore="Client_OS" supportedGrantTypes="CLIENT_CREDENTIALS" >
+		<oauth2-provider:token-config tokenStore="Token_OS" tokenTtl="5" tokenTtlTimeUnit="MINUTES"/>
+	</oauth2-provider:config>
+	<vm:config name="VM_Config" doc:name="VM Config" doc:id="1128f152-d8b0-40ff-acc5-b56d71b2350b">
+		<vm:queues >
+			<vm:queue queueName="WMT_CA_OAUTHTOKEN_CLIENTFLOW" queueType="PERSISTENT" />
+		</vm:queues>
+	</vm:config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="504b302a-46c8-4d03-851c-86b128663592" >
+		<http:request-connection host="localhost" port="${http.port}" />
+	</http:request-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="a6e222a7-550f-45c5-8a33-5516038bd2ce" file="config.yaml" />
+	<ee:object-store-caching-strategy name="Caching_Strategy" doc:name="Caching Strategy" doc:id="363bce7f-5c17-4f84-9792-87970414e4d9" keyGenerationExpression="#[vars.key]">
+		<os:private-object-store alias="Cache_OS" entryTtl="60" entryTtlUnit="MINUTES"/>
+	</ee:object-store-caching-strategy>
+	<flow name="oauth_clientCreation" doc:id="d330cea0-f0fb-4963-9241-700256cc7a42" >
+		<http:listener doc:name="Listener" doc:id="55f03781-126d-4c5c-916b-7fc4712e46c5" config-ref="HTTP_Listener_config" path="/clientid"/>
+		<oauth2-provider:create-client doc:name="Create client" doc:id="22544509-b282-40a5-b65a-f6dcf951b541" config-ref="OAuth2_Provider_Config" clientId='${client_credentials.client_id}' type="CONFIDENTIAL" secret="${client_credentials.client_secret}" clientName="${client_credentials.client_name}" description='#[""]' principal='#[""]' redirectUris='#[["google.com"]]' authorizedGrantTypes='#[["CLIENT_CREDENTIALS"]]'/>
+		<set-payload value='#["Client ID is successfully created"]' doc:name="Set Payload" doc:id="a9c860ff-cdc1-4dc0-8cac-bf7d13e98d6d" />
+	</flow>
+	<flow name="oauth_tokenValidation" doc:id="3b125e9b-6e4f-415e-954c-51ba4c648361" >
+		<http:listener doc:name="Listener" doc:id="6a0b44d2-8928-456f-9156-b04dfb508785" config-ref="HTTP_Listener_config" path="/validatetoken"/>
+		<oauth2-provider:validate-token doc:name="Validate token" doc:id="ee7ffd5a-5a63-4e95-8863-164e36a45fbf" config-ref="OAuth2_Provider_Config"/>
+		<logger level="INFO" doc:name="Logger" doc:id="2ebea91a-a4b7-47eb-9875-453d472ab4ff" />
+	</flow>
+	<flow name="oauth_accessToken" doc:id="b618d6eb-52c2-4c52-b0d9-236315189b0c" >
+		<http:listener doc:name="Listener" doc:id="6caf6845-21fb-4a8b-b610-4d22f3973e39" config-ref="HTTP_Listener_config" path="/oauth2/accessToken"/>
+		<logger level="INFO" doc:name="Logger" doc:id="37c0a893-120c-401d-910d-88dde9068584" message='#["Request received to access token"]'/>
+		<set-variable value="#[attributes.headers.client_id]" doc:name="Set Variable" doc:id="3078f9e5-8aa8-49f6-a26d-46c524337e66" variableName="key"/>
+		<ee:cache doc:name="Cache" doc:id="49d6ac98-4910-414e-88fe-e7dca465c938" cachingStrategy-ref="Caching_Strategy">
+			<http:request method="POST" doc:name="Request" doc:id="32b85801-e54d-4e2e-8c83-9efe978f0b94" config-ref="HTTP_Request_configuration" path="/token">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"client_secret" : attributes.headers.client_secret,
+	"grant_type" : attributes.headers.grant_type,
+	"client_id" : attributes.headers.client_id
+}]]]></http:headers>
+		</http:request>
+			<logger level="INFO" doc:name="Logger" doc:id="f22ad55c-14f3-4e59-9697-f98a1d35b4c7" message='#["Logging inside Cache scope"]'/>
+		</ee:cache>
+		<set-payload value="#[access_token: payload.access_token]" doc:name="Set Payload" doc:id="819ddef3-fb02-417a-88f9-893b305ea0ef" />
+		<logger level="INFO" doc:name="Logger" doc:id="24458228-4e8b-4e27-a65d-f329fbb89733" message="#[payload]"/>
+	</flow>
+</mule>

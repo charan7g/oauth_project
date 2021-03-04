@@ -1,0 +1,8 @@
+http:
+ port: "8081"
+
+client_credentials:
+ client_id: "7e8ccbe9ab2443f5a1b501f25e95f8f7"
+ client_secret: "5bE3830FfC09449AbbC60427c3eCD7C9"
+ client_name: ""
+ Authorization: "CLIENT_CREDENTIALS"
